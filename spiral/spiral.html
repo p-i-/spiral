@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+ 
+<html>
+    <head>
+        <title>Spiral</title>
+        <meta charset="utf-8">
+         
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js"></script>
+        <script src="http://d3js.org/d3.v3.min.js"></script>
+        <script src="../../lib/WebMIDIAPI.js"></script>
+
+        <script src="./pimath.js"></script>
+        <script src="./spiral.js"></script>
+        <script src="./karplus.js"></script>
+
+        <style type="text/css">
+            html, body {
+              width:  100%;
+              height: 100%;
+              margin:  0px;
+            }
+
+            #backCanvas {
+                position: relative;
+                z-index: 1;
+            }
+            
+            #myCanvas {
+                position: absolute;
+                z-index: 2;
+            }
+            
+        </style>
+
+    </head>
+     
+    <body>
+        Average gap between notes: 
+        <input type=range id=densitySlider min=0 max=2 value="2" step=".01"> </input>
+        <output id=densityLabel></output>
+        <script>
+            $('#densitySlider')
+                .on( 'change',  function(x) {$('#densityLabel').val(x.target.value)} )
+                .trigger( 'change' );
+        </script>
+        <div>
+            <canvas id="myCanvas">   wtf no canvas     </canvas>
+            <canvas id="backCanvas"> wtf no backCanvas </canvas>
+        </div>
+
+        <script>
+
+// "http://cdnjs.cloudflare.com/ajax/libs/mathjs/1.5.1/math.min.js"
+// "https://rawgit.com/patrickroberts/complex-js/master/lib/complex.min.js"
+
+// READ: https://developer.chrome.com/devtools/docs/workspaces#mapping-a
+
+"use strict";
+
+
+function importlib(foo) {
+    var s = document.createElement('script'); 
+    s.setAttribute('type', 'text/javascript'); 
+    s.setAttribute('src', foo);
+    document.getElementsByTagName("body")[0].appendChild(s);
+}
+
+
+// = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
+
+
+// = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
+
+var audio;
+
+$(document).ready(function() 
+{
+    //audio = AudioSetup(); // https://developers.google.com/web/updates/2017/09/autoplay-policy-changes#webaudio
+    GUI.setup();
+});
+
+var GUI = {
+    setup: function() {
+        this.canvas     = document.getElementById("myCanvas");
+        this.backCanvas = document.getElementById("backCanvas");
+
+        this.context     = this.canvas.getContext("2d");
+        this.backContext = this.backCanvas.getContext("2d");
+
+        //this.canvas.addEventListener( "click", function(e) {GUI.click(e);} );
+        this.canvas.addEventListener( "mousedown", function(e) {GUI.mousedown(e);} );
+        this.canvas.addEventListener( "mouseup"  , function(e) {GUI.mouseup(e);} );
+        this.canvas.addEventListener( "mousemove", function(e) {GUI.mousemove(e);} );
+
+        window.onresize = function() {
+            clearTimeout( GUI.resizeTimer );
+            GUI.resizeTimer = setTimeout( GUI.resizeEvent.bind(GUI), 100 );
+        };
+        this.resizeEvent();
+
+        this.vsync();
+    },
+
+    vsync: function() {
+        GUI.render();
+        window.requestAnimationFrame(GUI.vsync);    
+    },
+     
+    resizeEvent: function() {
+        this.backcolor = d3.hsl( 180  + Math.random()*120, 0.5, 0.05 );
+
+        this.pixW = this.backCanvas.width   = this.canvas.width  = window.innerWidth;
+        this.pixH = this.backCanvas.height  = this.canvas.height = window.innerHeight;
+
+        this.scale = Math.min(this.pixW/2, this.pixH/2) / 1.1;
+
+        this.backContext.setTransform(1,0,0,1,  0,0);
+        this.backContext.fillStyle = GUI.backcolor;
+        this.backContext.fillRect(0, 0, this.pixW, this.pixH);
+        // (0,0) at center of canvas
+        // y increases up
+        // unit circle fits on canvas with margin 0.1
+        this.backContext.translate(this.pixW/2, this.pixH/2);
+        this.backContext.scale(this.scale, -this.scale); // flip y
+
+        spiral.recalc(this.scale); 
+        spiral.notes.forEach( function(note) {note.heat=0;} );
+        spiral.gen_paths();
+        spiral.draw(this.backContext, true); // draw inactives?
+    },
+
+    render: function() {
+        // clear canvas
+        this.context.setTransform(1,0,0,1, 0,0);
+        this.context.clearRect(0, 0, this.pixW, this.pixH);
+        this.context.translate(this.pixW/2, this.pixH/2);
+        this.context.scale(this.scale, -this.scale); // flip y
+
+        var energy = new Array(88);
+
+
+        spiral.notes.forEach( function(note, index) {
+            note.heat = energy[index] || 0;
+        });
+        
+        spiral.gen_paths();
+        spiral.draw(this.context, false); // draw inactives?
+
+        if( audio ) {
+            audio.activeNotes().forEach( function(note) {
+                var k = note.index();
+                energy[k] = Math.max( energy[k] || 0, note.energy() );
+            });
+
+            var minors = [0,0,0,2,3,5,5,7,7,8,10,11];
+
+            var density = Number( $('#densityLabel').val() );
+            if( Math.random() * density < 1/60  &&  density < 1.99 ) 
+            {
+                var t = minors[ Math.floor(Math.random()*minors.length) ];
+                t += 12 * Math.floor( 8 * (1 - Math.cos(τ*Math.random()))/2 );
+                if( t>=0 && t<88 )
+                    audio.note_on( t, .5 + .5*Math.random() );
+            }
+        }
+    },
+
+    mouse_did_move: false,
+
+    mousedown: function(e) {
+        // https://developers.google.com/web/updates/2017/09/autoplay-policy-changes#webaudio
+        if( ! audio )
+            audio = AudioSetup();
+
+        var rect = e.target.getBoundingClientRect();
+        
+        var style = getComputedStyle(e.target,null) ;
+
+        function prop(p) {
+            return parseInt( style.getPropertyValue(p), 10 );
+        }
+        var pix = { 
+            x: e.clientX - rect.left - prop("border-left-width") - prop("padding-left"),
+            y: e.clientY - rect.top  - prop("border-top-width")  - prop("padding-top")
+        }
+
+        var z = new Z(
+             (pix.x-this.pixW/2)/this.scale,
+            -(pix.y-this.pixH/2)/this.scale
+            );
+
+        var note = spiral.click(z);
+
+        if( note.index >= 0 )
+            audio.note_on( note.index, note.vol );
+        
+        this.mouse_did_move = false;
+    },
+
+    mousemove: function(e) {
+        this.mouse_did_move = true;
+    },
+
+    mouseup: function(e) {
+        if( ! this.mouse_did_move )
+            audio.note_off();
+    }
+}
+
+function AudioSetup() 
+{
+    var context  = new (window.AudioContext || window.webkitAudioContext)();
+
+    var sampleRate = context.sampleRate;
+
+    var activeNotes = [];
+
+    var scriptNode = context.createScriptProcessor(1024, 0, 1);
+
+    // Audio callback!
+    scriptNode.onaudioprocess = function(ev) {
+        var buf = ev.outputBuffer;
+
+        // Loop through the output channels (in this case there is only one)
+        for (var channel = 0; channel < buf.numberOfChannels; channel++) 
+        {
+            // get and clear output buffer
+            var data = buf.getChannelData(channel);            
+            for( var n=0; n < data.length; n++ )
+                data[n] = 0;
+            
+            activeNotes.forEach( 
+                function(note) { 
+                    note.renderTo(data); 
+                });
+        }
+
+        if( ! activeNotes.every( function(note) { return note.is_alive(); } ) )
+        {    
+            activeNotes = activeNotes.filter( function(note) {
+//                 if( ! note.is_alive() )
+//                     console.log( "Note dead!" );
+                return note.is_alive(); 
+            });
+        }
+    }
+
+    //source.connect(scriptNode);
+    scriptNode.connect(context.destination);
+    //source.start();
+
+    var lastNote = undefined;
+
+    return {
+        activeNotes: function() {
+            return activeNotes;
+        },
+
+        scriptNode: scriptNode, // prevent garbage collection
+        
+        note_on: function(N, vol) {
+            var note = NoteGenerator(N, vol, sampleRate);
+            activeNotes.forEach(
+                function(note) {
+                    if( note.index == N )
+                        note.note_off();
+                });
+            activeNotes.push( note );
+            lastNote = note;
+        },
+
+        note_off: function(note) {
+            if( lastNote )
+                lastNote.note_off();
+        }
+    }
+}
+
+// DEPRECATION: "Web MIDI will ask a permission to use even if the sysex is not specified in 
+//   the MIDIOptions since M75, around June 2019"
+//   (https://www.chromestatus.com/feature/5138066234671104)
+
+// var m = null; // m = MIDIAccess object for you to make calls on
+// navigator.requestMIDIAccess().then( onsuccesscallback, onerrorcallback );
+//
+// function onsuccesscallback( access ) 
+// {
+//     m = access;
+//
+//     // Things you can do with the MIDIAccess object:
+//     var inputs = m.inputs; // inputs = MIDIInputMaps, you can retrieve the inputs with iterators
+//     var outputs = m.outputs; // outputs = MIDIOutputMaps, you can retrieve the outputs with iterators
+//
+//     var iteratorInputs = inputs.values() // returns an iterator that loops over all inputs
+//     var input = iteratorInputs.next().value // get the first input
+//
+//     input.onmidimessage = myMIDIMessagehandler; // onmidimessage( event ), event.data & event.receivedTime are populated
+//
+// //     var iteratorOutputs = outputs.values() // returns an iterator that loops over all outputs
+// //     var output = iteratorOutputs.next().value; // grab first output device
+//
+// //     output.send( [ 0x90, 0x45, 0x7f ] ); // full velocity note on A4 on channel zero
+// //     output.send( [ 0x80, 0x45, 0x7f ], window.performance.now() + 1000 ); // full velocity A4 note off in one second.
+// };
+
+function onerrorcallback( err ) {
+    console.log( "uh-oh! Something went wrong! Error code: " + err.code );
+}
+
+function myMIDIMessagehandler( event ) 
+{
+    var note = event.data[1] - 21;
+    var vel = event.data[2] / 127;
+
+    if( vel > 0 )
+        audio.note_on( note, vel );
+    else
+        audio.note_off( note );
+}
+
+        </script>
+
+    </body>
+</html>
