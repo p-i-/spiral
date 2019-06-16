@@ -56,7 +56,7 @@ var spiral = {
                ; i++,  toneme=(toneme+1)%12, z0['*='](this.ω),  arc *= this.R 
                ) 
         {
-            var FUDGE_FACTOR = 4;
+            var FUDGE_FACTOR = 8;
             var steps = Math.round(arc/FUDGE_FACTOR)+1,
                 Δθ = this.note_width * (τ/12)/steps;
             
