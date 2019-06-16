@@ -145,7 +145,7 @@ var spiral = {
             X.closePath();
 
             var fill = d3.hsl( 30 * note.toneme, .5,         note.heat*.7 ).toString();
-            var edge = d3.hsl( 30 * note.toneme, .7, .5 + .5*note.heat    ).toString();
+            var edge = d3.hsl( 30 * note.toneme, .7, .1 + .9*note.heat    ).toString();
 
             X.strokeStyle = edge; // d3.lab(fill).brighter(1);
             X.fillStyle   = fill;
