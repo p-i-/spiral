@@ -35,11 +35,14 @@
     </head>
      
     <body>
-        Average gap between notes: 
-        <input type=range id=densitySlider min=0 max=2 value="2" step=".01"> </input>
+        <p>
         <button type="button" onclick="start();">Start!</button>
+        </p>
 
+        <p>Average gap between notes: 
+        <input type=range id=densitySlider min=0 max=2 value="2" step=".01"> </input>        
         <output id=densityLabel></output>
+        </p>
         <script>
             $('#densitySlider')
                 .on( 'change',  function(x) {
@@ -286,58 +289,58 @@ function AudioSetup()
     }
 }
 
-// var m = null; // m = MIDIAccess object for you to make calls on
-// navigator.requestMIDIAccess().then( onsuccesscallback, onerrorcallback );
+var m = null; // m = MIDIAccess object for you to make calls on
+navigator.requestMIDIAccess().then( onsuccesscallback, onerrorcallback );
 
-// function onsuccesscallback( access ) 
-// {
-//     m = access;
+function onsuccesscallback( access ) 
+{
+    m = access;
 
-//     // Things you can do with the MIDIAccess object:
-//     var inputs = m.inputs; // inputs = MIDIInputMaps, you can retrieve the inputs with iterators
-//     var outputs = m.outputs; // outputs = MIDIOutputMaps, you can retrieve the outputs with iterators
+    // Things you can do with the MIDIAccess object:
+    var inputs = m.inputs; // inputs = MIDIInputMaps, you can retrieve the inputs with iterators
+    var outputs = m.outputs; // outputs = MIDIOutputMaps, you can retrieve the outputs with iterators
 
-//     var iteratorInputs = inputs.values();  // returns an iterator that loops over all inputs
-//     var input;
+    var iteratorInputs = inputs.values();  // returns an iterator that loops over all inputs
+    var input;
 
-//     while ( input = iteratorInputs.next().value ) {
-//         console.log( "input" );
-//         input.onmidimessage = myMIDIMessagehandler; // onmidimessage( event ), event.data & event.receivedTime are populated
-//     }
+    while ( input = iteratorInputs.next().value ) {
+        console.log( "input" );
+        input.onmidimessage = myMIDIMessagehandler; // onmidimessage( event ), event.data & event.receivedTime are populated
+    }
 
-// //     var iteratorOutputs = outputs.values() // returns an iterator that loops over all outputs
-// //     var output = iteratorOutputs.next().value; // grab first output device
+//     var iteratorOutputs = outputs.values() // returns an iterator that loops over all outputs
+//     var output = iteratorOutputs.next().value; // grab first output device
 
-// //     output.send( [ 0x90, 0x45, 0x7f ] ); // full velocity note on A4 on channel zero
-// //     output.send( [ 0x80, 0x45, 0x7f ], window.performance.now() + 1000 ); // full velocity A4 note off in one second.
-// };
+//     output.send( [ 0x90, 0x45, 0x7f ] ); // full velocity note on A4 on channel zero
+//     output.send( [ 0x80, 0x45, 0x7f ], window.performance.now() + 1000 ); // full velocity A4 note off in one second.
+};
 
-// function onerrorcallback( err ) {
-//   console.log( "uh-oh! Something went wrong! Error code: " + err.code );
-// }
+function onerrorcallback( err ) {
+  console.log( "uh-oh! Something went wrong! Error code: " + err.code );
+}
 
-// function myMIDIMessagehandler( event ) 
-// {
-//     console.log( "ev" );
+function myMIDIMessagehandler( event ) 
+{
+    console.log( "ev" );
 
-//     switch( event.data[0] ) {
-//         case 144: // note on/off
-//             var note        = event.data[1] - 21,
-//                 vel         = event.data[2] / 127;
-//             if( vel > 0 )
-//                 audio.note_on( note, vel );
-//             else
-//                 audio.note_off( note );
-//             break;
+    switch( event.data[0] ) {
+        case 144: // note on/off
+            var note        = event.data[1] - 21,
+                vel         = event.data[2] / 127;
+            if( vel > 0 )
+                audio.note_on( note, vel );
+            else
+                audio.note_off( note );
+            break;
         
-//         case 176: // ped on/off
-//             if( event.data[1] == 64 ) {
-//                 var is_down = (event.data[2] == 127);
-//                 audio.pedal_event(is_down);
-//             }
-//             break;
-//     } 
-// }
+        case 176: // ped on/off
+            if( event.data[1] == 64 ) {
+                var is_down = (event.data[2] == 127);
+                audio.pedal_event(is_down);
+            }
+            break;
+    } 
+}
 
         </script>
 
